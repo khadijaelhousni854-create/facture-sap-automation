@@ -1,0 +1,30 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+psycopg2-binary
+python-dotenv
+# Journal de bord — Projet RPA IAM
+
+## 08/08/2026 — Stagiaire 3
+
+### Fait aujourd'hui
+- Installation et configuration de PostgreSQL
+- Création de la base `projet_marsa_maroc`
+- Modèle de données créé : tables `factures`, `bons_de_commande`, `logs`
+- API FastAPI développée avec 4 endpoints :
+  - POST /factures/
+  - GET /factures/
+  - GET /factures/{id}
+  - PUT /factures/{id}/statut
+- Tests validés via Swagger UI (/docs)
+- Code poussé sur GitHub
+
+### Difficultés rencontrées et solutions
+- Bug d'encodage UTF-8 avec psycopg2 → résolu en passant au driver pg8000
+- Conflit de branches Git (main vs master) → résolu avec git branch -M main
+- Historiques Git non liés (local vs distant) → résolu avec --allow-unrelated-histories
+
+### Prochaine étape
+- Construire le moteur d'orchestration
+- Ajouter les endpoints pour les logs
