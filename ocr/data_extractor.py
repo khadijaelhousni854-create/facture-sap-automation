@@ -1,4 +1,5 @@
-﻿"""
+﻿# src/ocr/data_extractor.py
+"""
 data_extractor.py — Extraction des champs métier à partir du texte OCR.
 
 Sortie alignée sur les clés attendues par nettoyage.nettoyer_facture() :
@@ -39,7 +40,9 @@ class DataExtractor:
         }
 
     # ------------------------------------------------------------
-    def _montant_apres_label(self, text, label_patterns, window=70):
+    # OUTIL COMMUN : chercher le 1er montant qui suit un label donné
+    # ------------------------------------------------------------
+    def _montant_apres_label(self, text, label_patterns, window=40):
         for label_pattern in label_patterns:
             m = re.search(label_pattern, text, re.IGNORECASE)
             if not m:
@@ -55,37 +58,87 @@ class DataExtractor:
         return None
 
     # ------------------------------------------------------------
+    # FOURNISSEUR
+    # ------------------------------------------------------------
     def _extract_fournisseur(self, text):
+        """Reconnaît le nom du fournisseur parmi une liste de motifs connus."""
         patterns = [
             r"maroc\s+telecom",
             r"itissalat\s+al[\s-]*maghrib",
-            r"sodep\s+vpn",
-            r"sodep\s+depa",
-            r"marsa\s+maroc",
         ]
         for p in patterns:
             m = re.search(p, text, re.IGNORECASE)
             if m:
                 return m.group(0).upper()
-        return "UNKNOWN"
+        # Toutes les factures traitées (pilote IAM) proviennent de Maroc
+        # Telecom ; le nom n'apparaît pas toujours en texte lisible
+        # (parfois juste en logo/image), donc on retombe sur cette valeur
+        # par défaut plutôt que de risquer de capturer le nom du CLIENT
+        # (ex: "SODEP DEPA") par erreur.
+        return "MAROC TELECOM"
 
+    # ------------------------------------------------------------
+    # NUMÉRO DE FACTURE
     # ------------------------------------------------------------
     def _extract_numero(self, text):
-        """Format A: 'N° Facture : NUM'  |  Format B: 'Facture n° NUM du DATE'"""
-        patterns = [
-            r"n[°'#]?\s*facture\s*:?\s*(\d{10,20})",
-            r"facture\s*n[°'#]?\s*:?\s*(\d{10,20})",
-        ]
-        for p in patterns:
-            m = re.search(p, text, re.IGNORECASE)
-            if m:
-                return m.group(1)
-        return None
+        """
+        Extrait le numéro de facture (16 chiffres en général), de façon
+        robuste face aux erreurs OCR sur le symbole séparateur (°, ', º,
+        absent...) et aux espaces parasites insérés dans le numéro.
 
+        Stratégie en 2 temps :
+          1) Ancré sur le mot "facture" : prend la première longue
+             séquence de chiffres qui suit, peu importe ce qu'il y a
+             entre les deux.
+          2) Repli : cherche n'importe où dans le texte une séquence de
+             chiffres, et ne garde que celles dont les 6 derniers
+             chiffres ressemblent à un MOIS+ANNÉE plausible
+             (ex: "012024" = 01/2024) — schéma stable sur toutes les
+             factures observées, sert de filtre de confiance même si
+             "facture" n'a pas été lu par l'OCR.
+        """
+        candidats = []
+
+        for m in re.finditer(r"facture\D{0,15}(\d[\d ]{8,25}\d)", text, re.IGNORECASE):
+            candidats.append(m.group(1).replace(" ", ""))
+
+        for m in re.finditer(r"(\d[\d ]{12,24}\d)", text):
+            candidats.append(m.group(1).replace(" ", ""))
+
+        for num in candidats:
+            if self._numero_facture_plausible(num):
+                return num
+
+        return candidats[0] if candidats else None
+
+    def _numero_facture_plausible(self, num):
+        """
+        Vérifie que le numéro a une longueur plausible (14-18 chiffres)
+        et que ses 6 derniers chiffres forment un couple mois/année
+        crédible (MMAAAA, mois 01-12, année 2015-2035).
+        """
+        if not (14 <= len(num) <= 18):
+            return False
+        mois, annee = num[-6:-4], num[-4:]
+        try:
+            m, a = int(mois), int(annee)
+        except ValueError:
+            return False
+        return 1 <= m <= 12 and 2015 <= a <= 2035
+
+    # ------------------------------------------------------------
+    # NUMÉRO DE CLIENT MARSA MAROC
     # ------------------------------------------------------------
     def _extract_numero_client(self, text):
+        """
+        Numéro de client : suite de groupes de chiffres séparés par des
+        points, précédée de "N° client" (le "°" est parfois lu comme une
+        apostrophe ou un "º" par l'OCR, d'où [n[°'º#]?]).
+        Exemples réels : "7.2571863.15", "5.11104.00.00.100006",
+        "7.1186404.00.00.100438".
+        """
         patterns = [
-            r"n[°'#]?\s*client\s*:?\s*([\d]+(?:[.,][\d]+){1,6})",
+            r"n[°'º#]?\s*client\s*:?\s*([\d]+(?:[.,][\d]+){1,6})",
         ]
         for p in patterns:
             m = re.search(p, text, re.IGNORECASE)
@@ -94,11 +147,16 @@ class DataExtractor:
         return None
 
     # ------------------------------------------------------------
+    # DATE DE FACTURE
+    # ------------------------------------------------------------
     def _extract_date(self, text):
-        """Format A: 'Date Facture : JJ/MM/AAAA'  |  Format B: 'Facture n° NUM du JJ/MM/AAAA'"""
+        """
+        Format A : "Date Facture : JJ/MM/AAAA"
+        Format B : "Facture n° NUM du JJ/MM/AAAA"
+        """
         patterns = [
             r"date\s+facture\s*:?\s*(\d{1,2}/\d{1,2}/\d{4})",
-            r"facture\s*n[°'#]?\s*:?\s*\d{10,20}\s+du\s+(\d{1,2}/\d{1,2}/\d{4})",
+            r"facture\D{0,25}\d{10,20}\s+du\s+(\d{1,2}/\d{1,2}/\d{4})",
         ]
         for p in patterns:
             m = re.search(p, text, re.IGNORECASE)
@@ -107,6 +165,8 @@ class DataExtractor:
         m = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", text)
         return m.group(1) if m else None
 
+    # ------------------------------------------------------------
+    # PÉRIODE DE FACTURATION
     # ------------------------------------------------------------
     def _extract_periode(self, text):
         """Format B: 'Mois : Juillet 2024'  |  Format A: 'Période facturée :' + 2 dates"""
@@ -125,7 +185,14 @@ class DataExtractor:
         return None
 
     # ------------------------------------------------------------
+    # MONTANTS
+    # ------------------------------------------------------------
     def _extract_montant_ht(self, text):
+        """
+        Format B : "Total DH HT" (le mot "Total" évite de confondre avec
+                   l'en-tête de colonne "Montant DH HT")
+        Format A : "Montant HT :"
+        """
         labels = [
             r"total\s+dh\s+ht",
             r"montant\s+ht\b",
@@ -133,14 +200,16 @@ class DataExtractor:
         return self._montant_apres_label(text, labels)
 
     def _extract_montant_tva(self, text):
+        """Champ de contrôle interne uniquement (pas stocké en base)."""
         labels = [r"montant\s+tva"]
         return self._montant_apres_label(text, labels)
 
     def _extract_montant_ttc(self, text):
         """
-        Format B: 'Montant à payer DH TTC' (priorité — le mot 'payer' évite
-                  de confondre avec 'Solde ... Montant DH TTC' plus haut)
-        Format A: 'Montant TTC :'
+        Format B : "Montant à payer DH TTC" en priorité (le mot "payer"
+                   évite de confondre avec "Solde ... Montant DH TTC"
+                   qui apparaît plus haut dans le texte de ce format)
+        Format A : "Montant TTC :"
         """
         labels = [
             r"montant\s+\S{1,3}\s*payer\s+dh\s+ttc",
@@ -149,8 +218,13 @@ class DataExtractor:
         return self._montant_apres_label(text, labels)
 
     # ------------------------------------------------------------
+    # VALIDATION INTERNE (contrôle rapide, indépendant de validation.py)
+    # ------------------------------------------------------------
     def validate(self, extracted_data):
-        """Contrôle rapide : HT + TVA ≈ TTC (indépendant de validation.py)."""
+        """
+        Contrôle rapide de cohérence HT + TVA ≈ TTC, réalisé directement
+        après l'extraction OCR (avant même le pipeline de validation.py).
+        """
         ht = extracted_data.get("prix_ht")
         tva = extracted_data.get("montant_tva")
         ttc = extracted_data.get("montant")
@@ -159,4 +233,5 @@ class DataExtractor:
             if abs((ht + tva) - ttc) < 1:
                 return True, "Cohérent"
             return False, f"Incohérent : {ht} + {tva} ≠ {ttc}"
+
         return None, "Données incomplètes"
