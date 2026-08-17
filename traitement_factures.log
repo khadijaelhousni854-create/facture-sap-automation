@@ -1,4 +1,0 @@
-2026-08-14 12:21:56,309 | INFO | Facture insérée | numero_facture=0000405866012024-FINAL | statut=VALIDE
-2026-08-14 12:21:57,343 | INFO | Facture insérée | numero_facture=TEST-REJETE-FINAL | statut=REJETE
-2026-08-14 12:21:57,344 | WARNING | Rejet (numero_facture manquant) | source=None
-2026-08-14 12:21:57,559 | INFO | Doublon détecté | numero_facture=0000405866012024-FINAL

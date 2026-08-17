@@ -67,7 +67,15 @@ def nettoyer_facture(facture_brute: dict) -> dict:
     avec les clés attendues par la base :
     nom_fournisseur, numero_facture, numero_client_marsa, date_facture,
     periode_facturation, prix_ht, montant, source_fichier.
+
+    NB: le montant TTC peut arriver sous la clé "montant" (déjà renommé
+    par l'OCR) ou "montant_ttc" (nom brut) -> on accepte les deux,
+    priorité à "montant" s'il est présent.
     """
+    montant_source = facture_brute.get("montant")
+    if montant_source is None:
+        montant_source = facture_brute.get("montant_ttc")
+
     return {
         "nom_fournisseur": nettoyer_texte(facture_brute.get("nom_fournisseur")),
         "numero_facture": nettoyer_numero_facture(facture_brute.get("numero_facture")),
@@ -75,17 +83,6 @@ def nettoyer_facture(facture_brute: dict) -> dict:
         "date_facture": nettoyer_date(facture_brute.get("date_facture")),
         "periode_facturation": nettoyer_texte(facture_brute.get("periode_facturation")),
         "prix_ht": nettoyer_montant(facture_brute.get("prix_ht")),
-        "montant": nettoyer_montant(facture_brute.get("montant")),
-        "source_fichier": nettoyer_texte(facture_brute.get("source_fichier")),
-    }
-def nettoyer_facture(facture_brute: dict) -> dict:
-    return {
-        "nom_fournisseur": nettoyer_texte(facture_brute.get("nom_fournisseur")),
-        "numero_facture": nettoyer_numero_facture(facture_brute.get("numero_facture")),
-        "numero_client_marsa": nettoyer_texte(facture_brute.get("numero_client_marsa")),
-        "date_facture": nettoyer_date(facture_brute.get("date_facture")),
-        "periode_facturation": nettoyer_texte(facture_brute.get("periode_facturation")),
-        "prix_ht": nettoyer_montant(facture_brute.get("prix_ht")),
-        "montant": nettoyer_montant(facture_brute.get("montant_ttc")),  # <- montant_ttc devient "montant"
+        "montant": nettoyer_montant(montant_source),
         "source_fichier": nettoyer_texte(facture_brute.get("source_fichier")),
     }
