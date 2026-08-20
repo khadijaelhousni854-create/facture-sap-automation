@@ -19,17 +19,30 @@ def orchestrer_traitement(donnees_facture: dict, db: Session) -> dict:
     facture = None
     try:
         # 1. Sauvegarde en base
+        donnees_facture.pop("lignes", None)  # évite le crash si "lignes" est présent
         facture = FactureDB(**donnees_facture, statut="extraite")
         db.add(facture)
         db.commit()
         db.refresh(facture)
-        enregistrer_log(db, facture.id, "extraction", "info", "Facture enregistrée en base")
+        enregistrer_log(
+            db,
+            etape="extraction",
+            niveau="info",
+            message="Facture enregistrée en base",
+            facture_id=facture.id,
+        )
 
         # 2. Création du BC (simulée pour l'instant)
         facture.statut = "en_sap"
         db.commit()
         numero_bc = creer_bc_simule(donnees_facture)
-        enregistrer_log(db, facture.id, "sap", "info", f"BC créé (simulation) : {numero_bc}")
+        enregistrer_log(
+            db,
+            etape="sap",
+            niveau="info",
+            message=f"BC créé (simulation) : {numero_bc}",
+            facture_id=facture.id,
+        )
 
         # 3. Mise à jour finale
         facture.statut = "terminee"
@@ -40,7 +53,18 @@ def orchestrer_traitement(donnees_facture: dict, db: Session) -> dict:
         if facture is not None:
             facture.statut = "erreur"
             db.commit()
-            enregistrer_log(db, facture.id, "orchestration", "erreur", str(e))
+            enregistrer_log(
+                db,
+                etape="orchestration",
+                niveau="erreur",
+                message=str(e),
+                facture_id=facture.id,
+            )
         else:
-            enregistrer_log(db, None, "orchestration", "erreur", str(e))
+            enregistrer_log(
+                db,
+                etape="orchestration",
+                niveau="erreur",
+                message=str(e),
+            )
         raise
