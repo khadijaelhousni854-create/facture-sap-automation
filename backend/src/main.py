@@ -23,11 +23,11 @@ from models.database_models import (
     ReceptionnerDB,
     EntiteDB,
     RattacherDB,
-    PasserDB,
     OCRDataDB,
     LogDB,
     LigneFactureDB,
     FactureRejetDB,
+    UtilisateurDB,
 )
 from orchestrateur import orchestrer_traitement
 
@@ -98,8 +98,10 @@ def maj_statut(facture_id: int, update: StatutUpdate, db: Session = Depends(get_
 
         db.add(ReceptionnerDB(commande_id=commande.id, reception_id=reception.id))
 
-        # 3. Lie la facture à cette réception (table LIER)
-        db.add(LierDB(facture_id=facture.id, reception_id=reception.id))
+        # 3. Lie la commande à cette facture (table LIER, désormais commande <-> facture)
+        deja_lie = db.query(LierDB).filter_by(commande_id=commande.id, facture_id=facture.id).first()
+        if not deja_lie:
+            db.add(LierDB(commande_id=commande.id, facture_id=facture.id))
 
     db.commit()
     return {"id": facture_id, "statut": update.statut}
@@ -138,7 +140,7 @@ def rattacher_fournisseur_facture(facture_id: int, fournisseur_id: int, db: Sess
 
 
 # ===================================================================
-# ENTITES + RATTACHER
+# ENTITES + RATTACHER (désormais facture <-> entité)
 # ===================================================================
 @app.post("/entites/", response_model=EntiteResponse)
 def creer_entite(nom_entite: str, db: Session = Depends(get_db)):
@@ -157,37 +159,21 @@ def lister_entites(db: Session = Depends(get_db)):
     return db.query(EntiteDB).all()
 
 
-@app.put("/commandes/{commande_id}/entite/{entite_id}")
-def rattacher_commande_entite(commande_id: int, entite_id: int, db: Session = Depends(get_db)):
-    """Relation RATTACHER (N,N) : lie une commande à une entité/centre de coûts."""
-    commande = db.query(CommandeAchatDB).filter(CommandeAchatDB.id == commande_id).first()
+@app.put("/factures/{facture_id}/entite/{entite_id}")
+def rattacher_facture_entite(facture_id: int, entite_id: int, db: Session = Depends(get_db)):
+    """Relation RATTACHER (1,1 - 1,N) : lie une facture à une entité/centre de coûts."""
+    facture = db.query(FactureDB).filter(FactureDB.id == facture_id).first()
     entite = db.query(EntiteDB).filter(EntiteDB.id == entite_id).first()
-    if not commande or not entite:
-        raise HTTPException(status_code=404, detail="Commande ou entité introuvable")
+    if not facture or not entite:
+        raise HTTPException(status_code=404, detail="Facture ou entité introuvable")
 
-    deja_lie = db.query(RattacherDB).filter_by(commande_id=commande_id, entite_id=entite_id).first()
-    if not deja_lie:
-        db.add(RattacherDB(commande_id=commande_id, entite_id=entite_id))
-        db.commit()
-    return {"commande_id": commande_id, "entite_id": entite_id}
+    deja_lie = db.query(RattacherDB).filter_by(facture_id=facture_id).first()
+    if deja_lie:
+        raise HTTPException(status_code=409, detail="Cette facture est déjà rattachée à une entité")
 
-
-# ===================================================================
-# PASSER — relation Fournisseur ↔ Commande
-# ===================================================================
-@app.put("/commandes/{commande_id}/fournisseur/{fournisseur_id}")
-def rattacher_commande_fournisseur(commande_id: int, fournisseur_id: int, db: Session = Depends(get_db)):
-    """Relation PASSER (1,N - 0,N) : un fournisseur passe une commande."""
-    commande = db.query(CommandeAchatDB).filter(CommandeAchatDB.id == commande_id).first()
-    fournisseur = db.query(FournisseurDB).filter(FournisseurDB.id == fournisseur_id).first()
-    if not commande or not fournisseur:
-        raise HTTPException(status_code=404, detail="Commande ou fournisseur introuvable")
-
-    deja_lie = db.query(PasserDB).filter_by(commande_id=commande_id, fournisseur_id=fournisseur_id).first()
-    if not deja_lie:
-        db.add(PasserDB(commande_id=commande_id, fournisseur_id=fournisseur_id))
-        db.commit()
-    return {"commande_id": commande_id, "fournisseur_id": fournisseur_id}
+    db.add(RattacherDB(facture_id=facture_id, entite_id=entite_id))
+    db.commit()
+    return {"facture_id": facture_id, "entite_id": entite_id}
 
 
 # ===================================================================

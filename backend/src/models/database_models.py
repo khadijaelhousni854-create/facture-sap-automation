@@ -5,8 +5,19 @@ from database import Base
 
 
 # ===================================================================
-# NOUVELLE TABLE : FOURNISSEURS
-# (remplace le champ texte "fournisseur" dans FactureDB)
+# UTILISATEURS
+# ===================================================================
+class UtilisateurDB(Base):
+    __tablename__ = "utilisateurs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    psw = Column(String(255), nullable=False)
+
+    logs = relationship("LogDB", back_populates="utilisateur_rel")
+
+
+# ===================================================================
+# FOURNISSEURS
 # ===================================================================
 class FournisseurDB(Base):
     __tablename__ = "fournisseurs"
@@ -15,17 +26,17 @@ class FournisseurDB(Base):
     nom = Column(String(150), unique=True, nullable=False)
 
     factures = relationship("FactureDB", back_populates="fournisseur_rel")
-    commandes = relationship("PasserDB", back_populates="fournisseur")
 
 
+# ===================================================================
+# FACTURES
+# ===================================================================
 class FactureDB(Base):
     __tablename__ = "factures"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # Champ texte brut issu de l'OCR (nom tel qu'extrait, avant rapprochement)
     fournisseur_nom_extrait = Column(String(150))
-    # Nouvelle FK vers le fournisseur normalisé, une fois le rapprochement fait
     fournisseur_id = Column(Integer, ForeignKey("fournisseurs.id"), nullable=True)
 
     client = Column(String(150))
@@ -52,9 +63,14 @@ class FactureDB(Base):
 
     lignes = relationship("LigneFactureDB", back_populates="facture")
     fournisseur_rel = relationship("FournisseurDB", back_populates="factures")
-    liaisons_reception = relationship("LierDB", back_populates="facture")
     logs = relationship("LogDB", back_populates="facture")
     ocr_data = relationship("OCRDataDB", back_populates="facture", uselist=False)
+
+    # RATTACHER : facture <-> entite (1,1 - 1,N)
+    entite_rel = relationship("RattacherDB", back_populates="facture", uselist=False)
+
+    # LIER : commande <-> facture (1,1 - 1,1)
+    liaison_commande = relationship("LierDB", back_populates="facture", uselist=False)
 
 
 class LigneFactureDB(Base):
@@ -73,10 +89,7 @@ class LigneFactureDB(Base):
 
 
 # ===================================================================
-# NOUVELLE TABLE : OCR_DATA
-# Relation EXTRAIRE : 1,1 côté FACTURES - 1,1 côté OCR_DATA
-# => relation un-à-un stricte : chaque facture a au plus une entrée OCR_DATA,
-#    et chaque entrée OCR_DATA appartient à exactement une facture
+# OCR_DATA — EXTRAIRE (1,1 - 1,1)
 # ===================================================================
 class OCRDataDB(Base):
     __tablename__ = "ocr_data"
@@ -90,8 +103,8 @@ class OCRDataDB(Base):
 
 
 # ===================================================================
-# COMMANDES_ACHAT — remplace BonDeCommandeDB, avec tous les attributs du MLD
-# Plus de facture_id direct : le lien passe par RECEPTIONS puis LIER
+# COMMANDES_ACHAT
+# Plus de lien direct vers FOURNISSEURS (retiré du MCD)
 # ===================================================================
 class CommandeAchatDB(Base):
     __tablename__ = "commandes_achat"
@@ -108,13 +121,15 @@ class CommandeAchatDB(Base):
     centre_de_couts = Column(String(50))
     code_tva = Column(String(20))
 
-    fournisseurs = relationship("PasserDB", back_populates="commande")
     receptions = relationship("ReceptionnerDB", back_populates="commande")
-    entites = relationship("RattacherDB", back_populates="commande")
+    logs = relationship("LogDB", back_populates="commande")
+
+    # LIER : commande <-> facture (1,1 - 1,1)
+    liaison_facture = relationship("LierDB", back_populates="commande", uselist=False)
 
 
 # ===================================================================
-# NOUVELLE TABLE : RECEPTIONS
+# RECEPTIONS
 # ===================================================================
 class ReceptionDB(Base):
     __tablename__ = "receptions"
@@ -124,11 +139,11 @@ class ReceptionDB(Base):
     date_comptable = Column(Date)
 
     commandes = relationship("ReceptionnerDB", back_populates="reception")
-    factures = relationship("LierDB", back_populates="reception")
+    logs = relationship("LogDB", back_populates="reception")
 
 
 # ===================================================================
-# NOUVELLE TABLE : ENTITES
+# ENTITES
 # ===================================================================
 class EntiteDB(Base):
     __tablename__ = "entites"
@@ -136,25 +151,15 @@ class EntiteDB(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nom_entite = Column(String(150), nullable=False)
 
-    commandes = relationship("RattacherDB", back_populates="entite")
+    factures = relationship("RattacherDB", back_populates="entite")
 
 
 # ===================================================================
-# TABLES ASSOCIATIVES (relations N,N du MCD)
+# TABLES ASSOCIATIVES
 # ===================================================================
-class PasserDB(Base):
-    """Fournisseur passe une commande (1,N - 0,N)"""
-    __tablename__ = "passer"
-
-    fournisseur_id = Column(Integer, ForeignKey("fournisseurs.id"), primary_key=True)
-    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
-
-    fournisseur = relationship("FournisseurDB", back_populates="commandes")
-    commande = relationship("CommandeAchatDB", back_populates="fournisseurs")
-
 
 class ReceptionnerDB(Base):
-    """Une commande est réceptionnée (1,N - 0,N)"""
+    """Une commande est réceptionnée (1,1 - 1,1)"""
     __tablename__ = "receptionner"
 
     commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
@@ -165,29 +170,29 @@ class ReceptionnerDB(Base):
 
 
 class LierDB(Base):
-    """Une facture est liée à une réception (0,N - 0,N)"""
+    """LIER : une commande est liée à une facture (1,1 - 1,1)"""
     __tablename__ = "lier"
 
+    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
     facture_id = Column(Integer, ForeignKey("factures.id"), primary_key=True)
-    reception_id = Column(Integer, ForeignKey("receptions.id"), primary_key=True)
 
-    facture = relationship("FactureDB", back_populates="liaisons_reception")
-    reception = relationship("ReceptionDB", back_populates="factures")
+    commande = relationship("CommandeAchatDB", back_populates="liaison_facture")
+    facture = relationship("FactureDB", back_populates="liaison_commande")
 
 
 class RattacherDB(Base):
-    """Une commande est rattachée à une entité (1,N - 1,N)"""
+    """RATTACHER : une facture est rattachée à une entité (1,1 - 1,N)"""
     __tablename__ = "rattacher"
 
-    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
-    entite_id = Column(Integer, ForeignKey("entites.id"), primary_key=True)
+    facture_id = Column(Integer, ForeignKey("factures.id"), primary_key=True)
+    entite_id = Column(Integer, ForeignKey("entites.id"), nullable=False)
 
-    commande = relationship("CommandeAchatDB", back_populates="entites")
-    entite = relationship("EntiteDB", back_populates="commandes")
+    facture = relationship("FactureDB", back_populates="entite_rel")
+    entite = relationship("EntiteDB", back_populates="factures")
 
 
 # ===================================================================
-# LOGS — FK corrigée + champ utilisateur ajouté
+# LOGS
 # ===================================================================
 class LogDB(Base):
     __tablename__ = "logs"
@@ -196,15 +201,18 @@ class LogDB(Base):
     facture_id = Column(Integer, ForeignKey("factures.id"), nullable=True)
     commande_id = Column(Integer, ForeignKey("commandes_achat.id"), nullable=True)
     reception_id = Column(Integer, ForeignKey("receptions.id"), nullable=True)
+    utilisateur_id = Column(Integer, ForeignKey("utilisateurs.id"), nullable=True)
 
     etape = Column(String(50))
     niveau = Column(String(20))
     action = Column(String(100))
-    utilisateur = Column(String(100))
     message = Column(Text)
     date_creation = Column(DateTime)
 
     facture = relationship("FactureDB", back_populates="logs")
+    commande = relationship("CommandeAchatDB", back_populates="logs")
+    reception = relationship("ReceptionDB", back_populates="logs")
+    utilisateur_rel = relationship("UtilisateurDB", back_populates="logs")
 
 
 class FactureRejetDB(Base):
@@ -216,4 +224,3 @@ class FactureRejetDB(Base):
     raison = Column(String(255))
     donnees_brutes = Column(JSONB)
     date_rejet = Column(DateTime)
-    
