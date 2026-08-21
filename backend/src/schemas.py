@@ -12,10 +12,7 @@ class LigneFactureCreate(BaseModel):
 
 
 class FactureCreate(BaseModel):
-    # Renommé pour correspondre à FactureDB : c'est le texte brut extrait par l'OCR,
-    # avant tout rapprochement avec un FournisseurDB normalisé.
     fournisseur_nom_extrait: str
-    # Optionnel : peut être renseigné directement si le fournisseur est déjà connu/rapproché.
     fournisseur_id: Optional[int] = None
 
     client: str
@@ -60,15 +57,13 @@ class StatutUpdate(BaseModel):
 
 class LogResponse(BaseModel):
     id: int
-    # Devenus optionnels : un log peut concerner une facture, une commande,
-    # ou une réception (jamais tous les trois en même temps en général).
     facture_id: Optional[int] = None
     commande_id: Optional[int] = None
     reception_id: Optional[int] = None
     etape: str
     niveau: str
     action: Optional[str] = None
-    utilisateur: Optional[str] = None
+    utilisateur_id: Optional[int] = None
     message: str
     date_creation: datetime
 
@@ -91,9 +86,6 @@ class FactureRejetResponse(FactureRejetCreate):
         from_attributes = True
 
 
-# ===================================================================
-# NOUVEAUX SCHEMAS — pour les routes ajoutées (fournisseurs, entites, ocr)
-# ===================================================================
 class FournisseurResponse(BaseModel):
     id: int
     nom: str
@@ -118,6 +110,8 @@ class OCRDataResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
 class CommandeAchatCreate(BaseModel):
     numero_bc: str
     type_commande: Optional[str] = None
