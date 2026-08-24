@@ -19,10 +19,7 @@ from models.database_models import (
     FournisseurDB,
     CommandeAchatDB,
     ReceptionDB,
-    LierDB,
-    ReceptionnerDB,
     EntiteDB,
-    RattacherDB,
     OCRDataDB,
     LogDB,
     LigneFactureDB,
@@ -91,17 +88,15 @@ def maj_statut(facture_id: int, update: StatutUpdate, db: Session = Depends(get_
             db.add(commande)
             db.flush()  # pour obtenir commande.id sans commit complet
 
-        # 2. Crée une réception liée à cette commande
-        reception = ReceptionDB(date_documentation=datetime.utcnow().date())
+        # 2. Crée une réception directement liée à cette commande (colonne FK)
+        reception = ReceptionDB(
+            date_documentation=datetime.utcnow().date(),
+            commande_id=commande.id,
+        )
         db.add(reception)
-        db.flush()
 
-        db.add(ReceptionnerDB(commande_id=commande.id, reception_id=reception.id))
-
-        # 3. Lie la commande à cette facture (table LIER, désormais commande <-> facture)
-        deja_lie = db.query(LierDB).filter_by(commande_id=commande.id, facture_id=facture.id).first()
-        if not deja_lie:
-            db.add(LierDB(commande_id=commande.id, facture_id=facture.id))
+        # 3. Lie la commande à cette facture (colonne FK directe, plus de table LIER)
+        commande.facture_id = facture.id
 
     db.commit()
     return {"id": facture_id, "statut": update.statut}
@@ -140,7 +135,7 @@ def rattacher_fournisseur_facture(facture_id: int, fournisseur_id: int, db: Sess
 
 
 # ===================================================================
-# ENTITES + RATTACHER (désormais facture <-> entité)
+# ENTITES + RATTACHER (facture <-> entité, colonne FK directe)
 # ===================================================================
 @app.post("/entites/", response_model=EntiteResponse)
 def creer_entite(nom_entite: str, db: Session = Depends(get_db)):
@@ -167,11 +162,10 @@ def rattacher_facture_entite(facture_id: int, entite_id: int, db: Session = Depe
     if not facture or not entite:
         raise HTTPException(status_code=404, detail="Facture ou entité introuvable")
 
-    deja_lie = db.query(RattacherDB).filter_by(facture_id=facture_id).first()
-    if deja_lie:
+    if facture.entite_id is not None:
         raise HTTPException(status_code=409, detail="Cette facture est déjà rattachée à une entité")
 
-    db.add(RattacherDB(facture_id=facture_id, entite_id=entite_id))
+    facture.entite_id = entite_id
     db.commit()
     return {"facture_id": facture_id, "entite_id": entite_id}
 

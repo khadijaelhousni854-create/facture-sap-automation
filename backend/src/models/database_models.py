@@ -61,16 +61,19 @@ class FactureDB(Base):
     statut = Column(String(30), default="extraite")
     erreur_validation = Column(Text)
 
+    # RATTACHER : remplace RattacherDB — colonne FK directe vers ENTITES
+    entite_id = Column(Integer, ForeignKey("entites.id"), nullable=True)
+
     lignes = relationship("LigneFactureDB", back_populates="facture")
     fournisseur_rel = relationship("FournisseurDB", back_populates="factures")
     logs = relationship("LogDB", back_populates="facture")
     ocr_data = relationship("OCRDataDB", back_populates="facture", uselist=False)
 
-    # RATTACHER : facture <-> entite (1,1 - 1,N)
-    entite_rel = relationship("RattacherDB", back_populates="facture", uselist=False)
+    # RATTACHER : facture -> entite (1,1 - 1,N)
+    entite_rel = relationship("EntiteDB", back_populates="factures")
 
-    # LIER : commande <-> facture (1,1 - 1,1)
-    liaison_commande = relationship("LierDB", back_populates="facture", uselist=False)
+    # LIER : côté inverse — une facture peut être référencée par une commande
+    commande = relationship("CommandeAchatDB", back_populates="facture_rel", uselist=False)
 
 
 class LigneFactureDB(Base):
@@ -104,7 +107,6 @@ class OCRDataDB(Base):
 
 # ===================================================================
 # COMMANDES_ACHAT
-# Plus de lien direct vers FOURNISSEURS (retiré du MCD)
 # ===================================================================
 class CommandeAchatDB(Base):
     __tablename__ = "commandes_achat"
@@ -121,11 +123,14 @@ class CommandeAchatDB(Base):
     centre_de_couts = Column(String(50))
     code_tva = Column(String(20))
 
-    receptions = relationship("ReceptionnerDB", back_populates="commande")
+    # LIER : remplace LierDB — colonne FK directe vers FACTURES
+    facture_id = Column(Integer, ForeignKey("factures.id"), unique=True, nullable=True)
+
+    receptions = relationship("ReceptionDB", back_populates="commande")
     logs = relationship("LogDB", back_populates="commande")
 
-    # LIER : commande <-> facture (1,1 - 1,1)
-    liaison_facture = relationship("LierDB", back_populates="commande", uselist=False)
+    # LIER : commande -> facture (1,1 - 1,1)
+    facture_rel = relationship("FactureDB", back_populates="commande")
 
 
 # ===================================================================
@@ -138,7 +143,10 @@ class ReceptionDB(Base):
     date_documentation = Column(Date)
     date_comptable = Column(Date)
 
-    commandes = relationship("ReceptionnerDB", back_populates="reception")
+    # RÉCEPTIONNER : remplace ReceptionnerDB — colonne FK directe vers COMMANDES_ACHAT
+    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), nullable=False)
+
+    commande = relationship("CommandeAchatDB", back_populates="receptions")
     logs = relationship("LogDB", back_populates="reception")
 
 
@@ -151,44 +159,7 @@ class EntiteDB(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nom_entite = Column(String(150), nullable=False)
 
-    factures = relationship("RattacherDB", back_populates="entite")
-
-
-# ===================================================================
-# TABLES ASSOCIATIVES
-# ===================================================================
-
-class ReceptionnerDB(Base):
-    """Une commande est réceptionnée (1,1 - 1,1)"""
-    __tablename__ = "receptionner"
-
-    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
-    reception_id = Column(Integer, ForeignKey("receptions.id"), primary_key=True)
-
-    commande = relationship("CommandeAchatDB", back_populates="receptions")
-    reception = relationship("ReceptionDB", back_populates="commandes")
-
-
-class LierDB(Base):
-    """LIER : une commande est liée à une facture (1,1 - 1,1)"""
-    __tablename__ = "lier"
-
-    commande_id = Column(Integer, ForeignKey("commandes_achat.id"), primary_key=True)
-    facture_id = Column(Integer, ForeignKey("factures.id"), primary_key=True)
-
-    commande = relationship("CommandeAchatDB", back_populates="liaison_facture")
-    facture = relationship("FactureDB", back_populates="liaison_commande")
-
-
-class RattacherDB(Base):
-    """RATTACHER : une facture est rattachée à une entité (1,1 - 1,N)"""
-    __tablename__ = "rattacher"
-
-    facture_id = Column(Integer, ForeignKey("factures.id"), primary_key=True)
-    entite_id = Column(Integer, ForeignKey("entites.id"), nullable=False)
-
-    facture = relationship("FactureDB", back_populates="entite_rel")
-    entite = relationship("EntiteDB", back_populates="factures")
+    factures = relationship("FactureDB", back_populates="entite_rel")
 
 
 # ===================================================================
