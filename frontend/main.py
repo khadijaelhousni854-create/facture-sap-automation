@@ -50,6 +50,3 @@ async def main():
         await fermer_navigateur(playwright, navigateur)
         logger.info("=== Fin du traitement ===")
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
