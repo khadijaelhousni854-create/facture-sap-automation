@@ -13,6 +13,8 @@ from schemas import (
     FournisseurResponse,
     EntiteResponse,
     OCRDataResponse,
+    UtilisateurCreate,
+    UtilisateurResponse,
 )
 from models.database_models import (
     FactureDB,
@@ -79,23 +81,20 @@ def maj_statut(facture_id: int, update: StatutUpdate, db: Session = Depends(get_
     facture.statut = update.statut
 
     if update.numero_bc:
-        # 1. Récupère la commande existante par son numéro, ou la crée si absente
         commande = db.query(CommandeAchatDB).filter(
             CommandeAchatDB.numero_bc == update.numero_bc
         ).first()
         if not commande:
             commande = CommandeAchatDB(numero_bc=update.numero_bc)
             db.add(commande)
-            db.flush()  # pour obtenir commande.id sans commit complet
+            db.flush()
 
-        # 2. Crée une réception directement liée à cette commande (colonne FK)
         reception = ReceptionDB(
             date_documentation=datetime.utcnow().date(),
             commande_id=commande.id,
         )
         db.add(reception)
 
-        # 3. Lie la commande à cette facture (colonne FK directe, plus de table LIER)
         commande.facture_id = facture.id
 
     db.commit()
@@ -168,6 +167,35 @@ def rattacher_facture_entite(facture_id: int, entite_id: int, db: Session = Depe
     facture.entite_id = entite_id
     db.commit()
     return {"facture_id": facture_id, "entite_id": entite_id}
+
+
+# ===================================================================
+# UTILISATEURS + rattachement à une entité (association APPARTENIR)
+# ===================================================================
+@app.post("/utilisateurs/", response_model=UtilisateurResponse)
+def creer_utilisateur(utilisateur: UtilisateurCreate, db: Session = Depends(get_db)):
+    nouvel_utilisateur = UtilisateurDB(**utilisateur.dict())
+    db.add(nouvel_utilisateur)
+    db.commit()
+    db.refresh(nouvel_utilisateur)
+    return nouvel_utilisateur
+
+
+@app.get("/utilisateurs/", response_model=list[UtilisateurResponse])
+def lister_utilisateurs(db: Session = Depends(get_db)):
+    return db.query(UtilisateurDB).all()
+
+
+@app.put("/utilisateurs/{utilisateur_id}/entite/{entite_id}")
+def rattacher_utilisateur_entite(utilisateur_id: int, entite_id: int, db: Session = Depends(get_db)):
+    """Relation APPARTENIR (0,1 - 1,N) : associe un utilisateur à son entité."""
+    utilisateur = db.query(UtilisateurDB).filter(UtilisateurDB.id == utilisateur_id).first()
+    entite = db.query(EntiteDB).filter(EntiteDB.id == entite_id).first()
+    if not utilisateur or not entite:
+        raise HTTPException(status_code=404, detail="Utilisateur ou entité introuvable")
+    utilisateur.entite_id = entite_id
+    db.commit()
+    return {"utilisateur_id": utilisateur_id, "entite_id": entite_id}
 
 
 # ===================================================================

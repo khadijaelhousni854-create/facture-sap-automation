@@ -13,8 +13,11 @@ class UtilisateurDB(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     psw = Column(String(255), nullable=False)
 
-    logs = relationship("LogDB", back_populates="utilisateur_rel")
+    # NOUVEAU : lien vers ENTITES
+    entite_id = Column(Integer, ForeignKey("entites.id"), nullable=True)
 
+    logs = relationship("LogDB", back_populates="utilisateur_rel")
+    entite_rel = relationship("EntiteDB", back_populates="utilisateurs")  # NOUVEAU
 
 # ===================================================================
 # FOURNISSEURS
@@ -160,8 +163,7 @@ class EntiteDB(Base):
     nom_entite = Column(String(150), nullable=False)
 
     factures = relationship("FactureDB", back_populates="entite_rel")
-
-
+    utilisateurs = relationship("UtilisateurDB", back_populates="entite_rel")  # NOUVEAU
 # ===================================================================
 # LOGS
 # ===================================================================

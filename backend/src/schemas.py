@@ -142,3 +142,14 @@ class ReceptionResponse(ReceptionCreate):
 
     class Config:
         from_attributes = True
+class UtilisateurCreate(BaseModel):
+    psw: str
+    entite_id: Optional[int] = None
+
+
+class UtilisateurResponse(BaseModel):
+    id: int
+    entite_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
