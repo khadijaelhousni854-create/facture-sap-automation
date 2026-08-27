@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi des factures — SAP Fiori</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="titre">
+    <h1>Suivi des factures fournisseurs</h1>
+    <div class="sous-titre">MARSA MAROC · INTÉGRATION SAP FIORI</div>
+  </div>
+  <div class="horloge" id="horloge"></div>
+</header>
+
+<main>
+
+  <section class="resume" id="cartesResume"></section>
+
+  <div class="barre-outils">
+    <h2>Factures traitées</h2>
+    <div class="filtres" id="filtres">
+      <button class="filtre-btn actif" data-filtre="tous">Toutes</button>
+      <button class="filtre-btn" data-filtre="succes">Succès</button>
+      <button class="filtre-btn" data-filtre="en_cours">En cours</button>
+      <button class="filtre-btn" data-filtre="echec">Échec</button>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fournisseur</th>
+        <th>N° Facture</th>
+        <th>Date</th>
+        <th style="text-align:right">Montant TTC</th>
+        <th>Statut</th>
+        <th>Références SAP</th>
+      </tr>
+    </thead>
+    <tbody id="corpsTableau"></tbody>
+  </table>
+
+</main>
+
+<footer>
+  Données simulées (mock) — en attente de connexion à l'API FastAPI (Stagiaire 3).
+</footer>
+
+<script>
+  // ---------------------------------------------------------------
+  // DONNÉES SIMULÉES (mock)
+  // À remplacer plus tard par un fetch() vers l'API FastAPI réelle,
+  // par ex : const factures = await fetch("/api/factures").then(r => r.json());
+  // ---------------------------------------------------------------
+  const facturesMock = [
+    {
+      fournisseur: "IAM",
+      numero_facture: "F-2026-0456",
+      date_facture: "2026-08-10",
+      montant_ttc: 1800.00,
+      statut: "succes",
+      bc_numero: "BC-2026-789",
+      reception_numero: "REC-2026-321",
+    },
+    {
+      fournisseur: "IAM",
+      numero_facture: "F-2026-0457",
+      date_facture: "2026-08-11",
+      montant_ttc: 4250.50,
+      statut: "en_cours",
+      bc_numero: null,
+      reception_numero: null,
+    },
+    {
+      fournisseur: "IAM",
+      numero_facture: "F-2026-0458",
+      date_facture: "2026-08-12",
+      montant_ttc: 980.00,
+      statut: "echec",
+      bc_numero: null,
+      reception_numero: null,
+    },
+    {
+      fournisseur: "IAM",
+      numero_facture: "F-2026-0459",
+      date_facture: "2026-08-13",
+      montant_ttc: 12300.75,
+      statut: "succes",
+      bc_numero: "BC-2026-790",
+      reception_numero: "REC-2026-322",
+    },
+    {
+      fournisseur: "IAM",
+      numero_facture: "F-2026-0460",
+      date_facture: "2026-08-14",
+      montant_ttc: 560.00,
+      statut: "erreur_sap",
+      bc_numero: "BC-2026-791",
+      reception_numero: null,
+    },
+  ];
+
+  const libellesStatut = {
+    succes: "Succès",
+    en_cours: "En cours",
+    echec: "Échec",
+    erreur_sap: "Erreur SAP",
+  };
+
+  const formatMontant = (valeur) =>
+    valeur.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " MAD";
+
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  function rendreCartesResume(factures) {
+    const total = factures.length;
+    const succes = factures.filter(f => f.statut === "succes").length;
+    const enCours = factures.filter(f => f.statut === "en_cours").length;
+    const echecs = factures.filter(f => f.statut === "echec" || f.statut === "erreur_sap").length;
+
+    document.getElementById("cartesResume").innerHTML = `
+      <div class="carte-resume">
+        <div class="valeur">${total}</div>
+        <div class="label">Total factures</div>
+      </div>
+      <div class="carte-resume succes">
+        <div class="valeur">${succes}</div>
+        <div class="label">Traitées avec succès</div>
+      </div>
+      <div class="carte-resume attente">
+        <div class="valeur">${enCours}</div>
+        <div class="label">En cours de traitement</div>
+      </div>
+      <div class="carte-resume echec">
+        <div class="valeur">${echecs}</div>
+        <div class="label">En échec</div>
+      </div>
+    `;
+  }
+
+  function rendreTableau(factures) {
+    const corps = document.getElementById("corpsTableau");
+
+    if (factures.length === 0) {
+      corps.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#8593A3; padding: 32px;">Aucune facture pour ce filtre.</td></tr>`;
+      return;
+    }
+
+    corps.innerHTML = factures.map(f => `
+      <tr>
+        <td class="fournisseur">${f.fournisseur}</td>
+        <td class="numero">${f.numero_facture}</td>
+        <td>${formatDate(f.date_facture)}</td>
+        <td class="montant">${formatMontant(f.montant_ttc)}</td>
+        <td><span class="statut-pastille statut-${f.statut}">${libellesStatut[f.statut]}</span></td>
+        <td>
+          <div class="doc-refs">
+            <span class="num-doc">${f.bc_numero ? "BC " + f.bc_numero : '<span class="absent">BC non créé</span>'}</span>
+            <span class="num-doc">${f.reception_numero ? "REC " + f.reception_numero : '<span class="absent">Réception en attente</span>'}</span>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  function appliquerFiltre(filtre) {
+    if (filtre === "tous") return facturesMock;
+    return facturesMock.filter(f => f.statut === filtre);
+  }
+
+  // Gestion des boutons de filtre
+  document.getElementById("filtres").addEventListener("click", (e) => {
+    if (!e.target.matches(".filtre-btn")) return;
+
+    document.querySelectorAll(".filtre-btn").forEach(btn => btn.classList.remove("actif"));
+    e.target.classList.add("actif");
+
+    const filtre = e.target.dataset.filtre;
+    rendreTableau(appliquerFiltre(filtre));
+  });
+
+  // Horloge simple dans le header
+  function majHorloge() {
+    const maintenant = new Date();
+    document.getElementById("horloge").textContent =
+      maintenant.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }) +
+      " — " + maintenant.toLocaleTimeString("fr-FR");
+  }
+  majHorloge();
+  setInterval(majHorloge, 1000);
+
+  // Rendu initial
+  rendreCartesResume(facturesMock);
+  rendreTableau(facturesMock);
+</script>
+
+</body>
+</html>
