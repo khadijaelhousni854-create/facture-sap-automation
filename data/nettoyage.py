@@ -1,5 +1,10 @@
 """
 nettoyage.py — nettoyage des données brutes OCR avant validation.
+
+Aligné sur le nouveau schéma partagé (table `factures` créée par
+l'équipe). Champs pas encore extraits par l'OCR sont laissés à None :
+client, numero_abonnement, numero_appel, periode_debut, periode_fin,
+date_limite_paiement, montant_avance_credit, montant_du.
 """
 
 import re
@@ -63,26 +68,33 @@ def nettoyer_texte(valeur) -> str | None:
 
 def nettoyer_facture(facture_brute: dict) -> dict:
     """
-    Nettoie une facture brute (sortie OCR) et retourne un nouveau dict
-    avec les clés attendues par la base :
-    nom_fournisseur, numero_facture, numero_client_marsa, date_facture,
-    periode_facturation, prix_ht, montant, source_fichier.
+    Nettoie une facture brute (sortie OCR) et retourne un dict avec les
+    clés du nouveau schéma (table `factures`).
 
-    NB: le montant TTC peut arriver sous la clé "montant" (déjà renommé
-    par l'OCR) ou "montant_ttc" (nom brut) -> on accepte les deux,
-    priorité à "montant" s'il est présent.
+    NB: le montant TTC peut arriver sous la clé "montant" (ancien nom)
+    ou "montant_ttc" -> on accepte les deux.
     """
-    montant_source = facture_brute.get("montant")
-    if montant_source is None:
-        montant_source = facture_brute.get("montant_ttc")
+    montant_ttc_source = facture_brute.get("montant_ttc")
+    if montant_ttc_source is None:
+        montant_ttc_source = facture_brute.get("montant")
 
     return {
-        "nom_fournisseur": nettoyer_texte(facture_brute.get("nom_fournisseur")),
+        "fournisseur_nom_extrait": nettoyer_texte(facture_brute.get("nom_fournisseur")),
+        "client": nettoyer_texte(facture_brute.get("client")),
+        "numero_client": nettoyer_texte(facture_brute.get("numero_client_marsa") or facture_brute.get("numero_client")),
         "numero_facture": nettoyer_numero_facture(facture_brute.get("numero_facture")),
-        "numero_client_marsa": nettoyer_texte(facture_brute.get("numero_client_marsa")),
-        "date_facture": nettoyer_date(facture_brute.get("date_facture")),
-        "periode_facturation": nettoyer_texte(facture_brute.get("periode_facturation")),
-        "prix_ht": nettoyer_montant(facture_brute.get("prix_ht")),
-        "montant": nettoyer_montant(montant_source),
+        "type_facture": nettoyer_texte(facture_brute.get("type_facture")),
         "source_fichier": nettoyer_texte(facture_brute.get("source_fichier")),
+        "numero_abonnement": nettoyer_texte(facture_brute.get("numero_abonnement")),
+        "numero_appel": nettoyer_texte(facture_brute.get("numero_appel")),
+        "date_facture": nettoyer_date(facture_brute.get("date_facture")),
+        "mois_facture": nettoyer_texte(facture_brute.get("periode_facturation")),
+        "periode_debut": nettoyer_date(facture_brute.get("periode_debut")),
+        "periode_fin": nettoyer_date(facture_brute.get("periode_fin")),
+        "date_limite_paiement": nettoyer_date(facture_brute.get("date_limite_paiement")),
+        "montant_ht": nettoyer_montant(facture_brute.get("prix_ht") or facture_brute.get("montant_ht")),
+        "montant_tva": nettoyer_montant(facture_brute.get("montant_tva")),
+        "montant_ttc": nettoyer_montant(montant_ttc_source),
+        "montant_avance_credit": nettoyer_montant(facture_brute.get("montant_avance_credit")),
+        "montant_du": nettoyer_montant(facture_brute.get("montant_du")),
     }

@@ -4,7 +4,7 @@ data_extractor.py — Extraction des champs métier à partir du texte OCR.
 
 Sortie alignée sur les clés attendues par nettoyage.nettoyer_facture() :
     nom_fournisseur, numero_facture, numero_client_marsa, date_facture,
-    periode_facturation, prix_ht, montant
+    periode_facturation, type_facture, prix_ht, montant
 
 Gère 2 formats de factures connus :
   Format A ("Abonnement Internet Mobile") :
@@ -25,6 +25,8 @@ MONTANT_RE = re.compile(r"(\d{1,3}(?:[ ]\d{3})*[.,]\d{2})")
 class DataExtractor:
     """Extrait les champs métier d'une facture à partir du texte OCR."""
 
+    _CAR_NUM = r"[0-9oOØø]"
+
     def extract_fields(self, text_data):
         full_text = " ".join(item["text"] for item in text_data)
 
@@ -34,6 +36,7 @@ class DataExtractor:
             "numero_client_marsa": self._extract_numero_client(full_text),
             "date_facture": self._extract_date(full_text),
             "periode_facturation": self._extract_periode(full_text),
+            "type_facture": self._extract_type_facture(full_text),
             "prix_ht": self._extract_montant_ht(full_text),
             "montant": self._extract_montant_ttc(full_text),      # clé "montant" (TTC)
             "montant_tva": self._extract_montant_tva(full_text),  # contrôle interne uniquement
@@ -78,38 +81,70 @@ class DataExtractor:
         return "MAROC TELECOM"
 
     # ------------------------------------------------------------
+    # TYPE DE FACTURE (catégorie de service)
+    # ------------------------------------------------------------
+    def _extract_type_facture(self, text):
+        """
+        Catégorie de service, détectée par mots-clés caractéristiques.
+        Catégories connues : INTERNET_MOBILE, VPN, TELEPHONIE, ADSL_FIBRE.
+        """
+        if re.search(r"abonnement\s+internet\s+mobile", text, re.IGNORECASE):
+            return "INTERNET_MOBILE"
+        if re.search(r"\bvpn\b", text, re.IGNORECASE):
+            return "VPN"
+        if re.search(r"lign?e?\s+sp[ée]cialis[ée]e|acc[eè]s\s+primaire|\bpri\b|t[ée]l[ée]phonie", text, re.IGNORECASE):
+            return "TELEPHONIE"
+        if re.search(r"adsl|fibre\s+optique|menara", text, re.IGNORECASE):
+            return "ADSL_FIBRE"
+        return "AUTRE"
+
+    # ------------------------------------------------------------
     # NUMÉRO DE FACTURE
     # ------------------------------------------------------------
+    def _normaliser_numero(self, brut):
+        """Retire les espaces parasites et convertit les lettres qui
+        représentent en réalité un zéro mal reconnu par l'OCR."""
+        texte = brut.replace(" ", "")
+        for car in ("O", "o", "Ø", "ø"):
+            texte = texte.replace(car, "0")
+        return texte
+
     def _extract_numero(self, text):
         """
-        Extrait le numéro de facture (16 chiffres en général), de façon
-        robuste face aux erreurs OCR sur le symbole séparateur (°, ', º,
-        absent...) et aux espaces parasites insérés dans le numéro.
+        Extrait le numéro de facture (16 chiffres en général), robuste :
+          - au symbole séparateur mal lu (°, ', º, absent...)
+          - aux zéros du début confondus avec la lettre "O" par l'OCR
+          - aux espaces parasites insérés dans le numéro
 
-        Stratégie en 2 temps :
-          1) Ancré sur le mot "facture" : prend la première longue
-             séquence de chiffres qui suit, peu importe ce qu'il y a
-             entre les deux.
-          2) Repli : cherche n'importe où dans le texte une séquence de
-             chiffres, et ne garde que celles dont les 6 derniers
-             chiffres ressemblent à un MOIS+ANNÉE plausible
-             (ex: "012024" = 01/2024) — schéma stable sur toutes les
-             factures observées, sert de filtre de confiance même si
-             "facture" n'a pas été lu par l'OCR.
+        Stratégie :
+          1) Ancré sur "facture" : le plus fiable.
+          2) Repli (n'importe où dans le texte) : accepté UNIQUEMENT si
+             le numéro passe le test de plausibilité (6 derniers
+             chiffres = mois/année crédible).
         """
-        candidats = []
+        candidats_ancres = [
+            self._normaliser_numero(m.group(1))
+            for m in re.finditer(
+                rf"facture\D{{0,15}}({self._CAR_NUM}[{self._CAR_NUM} ]{{8,25}}{self._CAR_NUM})",
+                text, re.IGNORECASE,
+            )
+        ]
+        candidats_repli = [
+            self._normaliser_numero(m.group(1))
+            for m in re.finditer(
+                rf"({self._CAR_NUM}[{self._CAR_NUM} ]{{12,24}}{self._CAR_NUM})",
+                text,
+            )
+        ]
 
-        for m in re.finditer(r"facture\D{0,15}(\d[\d ]{8,25}\d)", text, re.IGNORECASE):
-            candidats.append(m.group(1).replace(" ", ""))
-
-        for m in re.finditer(r"(\d[\d ]{12,24}\d)", text):
-            candidats.append(m.group(1).replace(" ", ""))
-
-        for num in candidats:
+        for num in candidats_ancres + candidats_repli:
             if self._numero_facture_plausible(num):
                 return num
 
-        return candidats[0] if candidats else None
+        if candidats_ancres:
+            return candidats_ancres[0]
+
+        return None
 
     def _numero_facture_plausible(self, num):
         """
@@ -133,7 +168,7 @@ class DataExtractor:
         """
         Numéro de client : suite de groupes de chiffres séparés par des
         points, précédée de "N° client" (le "°" est parfois lu comme une
-        apostrophe ou un "º" par l'OCR, d'où [n[°'º#]?]).
+        apostrophe ou un "º" par l'OCR).
         Exemples réels : "7.2571863.15", "5.11104.00.00.100006",
         "7.1186404.00.00.100438".
         """

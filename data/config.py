@@ -1,18 +1,13 @@
 """
 config.py — configuration centralisée.
 """
-
 import os
 
 DB_CONFIG = {
-    "host": os.environ.get("DB_HOST", "localhost"),
+    "host": os.environ.get("DB_HOST", "ep-odd-frost-axah07j6.c-4.us-east-2.aws.neon.tech"),
     "port": int(os.environ.get("DB_PORT", 5432)),
-    "database": os.environ.get("DB_NAME", "factures_marsa"),
-    "user": os.environ.get("DB_USER", "postgres"),
-    "password": os.environ.get("DB_PASSWORD", "2005@Khadija1710"),  # <-- à remplacer
+    "dbname": os.environ.get("DB_NAME", "neondb"),
+    "user": os.environ.get("DB_USER", "neondb_owner"),
+    "password": os.environ.get("DB_PASSWORD", "npg_HPdgyQio83AG"),
+    "sslmode": os.environ.get("DB_SSLMODE", "require"),
 }
-
-STATUT_A_VALIDER = "A_VALIDER"
-STATUT_VALIDE = "VALIDE"
-STATUT_REJETE = "REJETE"
-STATUT_DOUBLON = "DOUBLON"
