@@ -1,3 +1,5 @@
+import random
+
 from sap_automation.models import Facture, StatutTraitement
 from sap_automation.logger import logger
 
@@ -8,30 +10,34 @@ async def creer_bon_de_commande(page, facture: Facture) -> StatutTraitement:
 
     Args:
         page: la page Playwright déjà connectée à SAP Fiori.
-        facture: les données de la facture validée (voir models.py).
+        facture: les données de la facture validée.
 
     Returns:
-        StatutTraitement: le résultat de l'opération (succès/échec + numéro BC).
+        StatutTraitement avec statut "terminee" ou "erreur".
 
-    TODO (étape 8-9) :
+    TODO (étapes finales, une fois accès SAP disponibles) :
     - Naviguer vers l'application Fiori "Créer commande d'achat"
     - Remplir les champs (fournisseur, lignes, montants...)
     - Cliquer sur "Enregistrer"
-    - Récupérer le numéro de BC généré
-    - Gérer les messages d'erreur SAP spécifiques
+    - Récupérer le numéro de BC généré par SAP
+    - Détecter et distinguer les erreurs SAP :
+        * session expirée
+        * formulaire rejeté
+        * temps de chargement trop long (timeout)
+        * popup inattendue
     """
     logger.info(f"Début création BC pour la facture {facture.numero_facture} (fournisseur: {facture.fournisseur})")
 
     try:
         # ---- SIMULATION en attendant le vrai code Playwright/SAP ----
-        # TODO : remplacer ce bloc par les vraies actions Playwright
-        # (page.goto, page.fill, page.click, etc.)
-        print(f"[MOCK] Création du BC pour la facture {facture.numero_facture}...")
+        # Équivalent à la fonction creer_bc_simule() mentionnée par le Stagiaire 3.
+        bc_numero = f"BC-TEST-{random.randint(10000, 99999)}"
+        print(f"[MOCK] Création du BC pour la facture {facture.numero_facture} → {bc_numero}")
 
         resultat = StatutTraitement(
             facture_id=facture.facture_id,
-            statut="succes",
-            bc_numero="BC-SIMULE-0001",
+            statut="terminee",
+            bc_numero=bc_numero,
             reception_numero=None,
             message="Simulation - à remplacer par le vrai traitement SAP",
         )
@@ -43,8 +49,9 @@ async def creer_bon_de_commande(page, facture: Facture) -> StatutTraitement:
         logger.error(f"Échec de création du BC pour la facture {facture.facture_id} : {e}")
         return StatutTraitement(
             facture_id=facture.facture_id,
-            statut="erreur_sap",
+            statut="erreur",
             bc_numero=None,
             reception_numero=None,
             message=str(e),
+            type_erreur="inconnue",   # TODO : préciser selon l'erreur réelle une fois SAP branché
         )

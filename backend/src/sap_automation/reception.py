@@ -1,3 +1,5 @@
+import random
+
 from sap_automation.models import Facture, StatutTraitement
 from sap_automation.logger import logger
 
@@ -12,27 +14,27 @@ async def creer_reception(page, facture: Facture, bc_numero: str) -> StatutTrait
         bc_numero: le numéro du BC créé précédemment (via bc.py).
 
     Returns:
-        StatutTraitement: le résultat de l'opération (succès/échec + numéro réception).
+        StatutTraitement avec statut "terminee" ou "erreur".
 
-    TODO (étape 8-9) :
+    TODO (étapes finales, une fois accès SAP disponibles) :
     - Naviguer vers l'application Fiori "Créer réception"
     - Rechercher le BC via bc_numero
     - Confirmer la réception des lignes de commande
     - Récupérer le numéro de réception généré
-    - Gérer les messages d'erreur SAP spécifiques
+    - Gérer les erreurs SAP spécifiques (session expirée, timeout, popup...)
     """
     logger.info(f"Début création réception pour le BC {bc_numero} (facture {facture.facture_id})")
 
     try:
         # ---- SIMULATION en attendant le vrai code Playwright/SAP ----
-        # TODO : remplacer ce bloc par les vraies actions Playwright
-        print(f"[MOCK] Création de la réception pour le BC {bc_numero}...")
+        reception_numero = f"REC-TEST-{random.randint(10000, 99999)}"
+        print(f"[MOCK] Création de la réception pour le BC {bc_numero} → {reception_numero}")
 
         resultat = StatutTraitement(
             facture_id=facture.facture_id,
-            statut="succes",
+            statut="terminee",
             bc_numero=bc_numero,
-            reception_numero="REC-SIMULE-0001",
+            reception_numero=reception_numero,
             message="Simulation - à remplacer par le vrai traitement SAP",
         )
 
@@ -43,8 +45,9 @@ async def creer_reception(page, facture: Facture, bc_numero: str) -> StatutTrait
         logger.error(f"Échec de création de la réception pour le BC {bc_numero} : {e}")
         return StatutTraitement(
             facture_id=facture.facture_id,
-            statut="erreur_sap",
+            statut="erreur",
             bc_numero=bc_numero,
             reception_numero=None,
             message=str(e),
+            type_erreur="inconnue",
         )
